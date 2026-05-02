@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="성용 헬스">
+<meta name="theme-color" content="#0D1021">
+<title>성용 헬스 트래커</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#0D1021;color:#fff;font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;overflow:hidden}
+#app{display:flex;flex-direction:column;height:100vh;max-width:480px;margin:0 auto}
+#content{flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px;-webkit-overflow-scrolling:touch}
+::-webkit-scrollbar{width:0}
+#nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;
+  display:flex;background:#111626;border-top:1px solid #1E2440;z-index:90;
+  padding-bottom:env(safe-area-inset-bottom)}
+.nb{flex:1;padding:12px 0;display:flex;flex-direction:column;align-items:center;gap:3px;
+  border:none;background:none;cursor:pointer}
+.nb span:first-child{font-size:20px}
+.nb span:last-child{font-size:10px;font-weight:600;letter-spacing:.5px;color:#445}
+.nb.on span:last-child{color:#FF6B35}
+.card{background:#141829;border:1px solid #1E2440;border-radius:16px;padding:15px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.fade{animation:fadeIn .2s ease}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="content"></div>
+  <nav id="nav">
+    <button class="nb on" data-action="nav" data-page="today"><span>🏋️</span><span>오늘</span></button>
+    <button class="nb" data-action="nav" data-page="calendar"><span>📅</span><span>달력</span></button>
+    <button class="nb" data-action="nav" data-page="results"><span>📊</span><span>1개월 효과</span></button>
+  </nav>
+</div>
+
+<script>
+// ── SVG ILLUSTRATIONS ────────────────────────────────────────────────────
+const EX_SVG = {
+  bench: `<svg viewBox="0 0 320 230" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:320px">
+<rect width="320" height="230" fill="#0F1628" rx="14"/>
+<!-- Back pad -->
+<rect x="105" y="85" width="110" height="75" fill="#2D3748" rx="6" stroke="#4A5568" stroke-width="2"/>
+<rect x="109" y="89" width="102" height="38" fill="#374151" rx="4"/>
+<!-- Seat -->
+<rect x="105" y="155" width="110" height="18" fill="#2D3748" rx="5" stroke="#4A5568" stroke-width="1.5"/>
+<!-- Machine side rails -->
+<rect x="60" y="60" width="10" height="110" fill="#374151" rx="3" stroke="#4A5568" stroke-width="1"/>
+<rect x="250" y="60" width="10" height="110" fill="#374151" rx="3" stroke="#4A5568" stroke-width="1"/>
+<!-- Handles -->
+<rect x="55" y="92" width="50" height="14" fill="#718096" rx="5" stroke="#9CA3AF" stroke-width="1"/>
+<rect x="215" y="92" width="50" height="14" fill="#718096" rx="5" stroke="#9CA3AF" stroke-width="1"/>
+<!-- Weight stack indicator -->
+<rect x="35" y="140" width="14" height="40" fill="#1E2740" rx="3" stroke="#374151" stroke-width="1"/>
+<rect x="35" y="140" width="14" height="22" fill="#F26419" rx="3"/>
+<!-- Person: head -->
+<circle cx="160" cy="72" r="17" fill="#C8956C" stroke="#A07850" stroke-width="1.5"/>
+<ellipse cx="160" cy="63" rx="15" ry="11" fill="#2D1B0E"/>
+<!-- Body -->
+<rect x="142" y="89" width="36" height="62" fill="#3B82F6" rx="8"/>
+<rect x="144" y="91" width="32" height="20" fill="#60A5FA" rx="6"/>
+<!-- Arms -->
+<path d="M142 108 Q110 102 82 100" stroke="#3B82F6" stroke-width="11" stroke-linecap="round" fill="none"/>
+<path d="M178 108 Q210 102 238 100" stroke="#3B82F6" stroke-width="11" stroke-linecap="round" fill="none"/>
+<path d="M142 108 Q110 102 82 100" stroke="#C8956C" stroke-width="6" stroke-linecap="round" fill="none"/>
+<path d="M178 108 Q210 102 238 100" stroke="#C8956C" stroke-width="6" stroke-linecap="round" fill="none"/>
+<!-- Legs -->
+<path d="M150 150 L138 190" stroke="#1E40AF" stroke-width="13" stroke-linecap="round"/>
+<path d="M170 150 L182 190" stroke="#1E40AF" stroke-width="13" stroke-linecap="round"/>
+<!-- Shoes -->
+<ellipse cx="135" cy="193" rx="16" ry="7" fill="#111827" stroke="#374151" stroke-width="1"/>
+<ellipse cx="185" cy="193" rx="16" ry="7" fill="#111827" stroke="#374151" stroke-width="1"/>
+<!-- Chest highlight -->
+<ellipse cx="160" cy="105" rx="18" ry="12" fill="#F26419" fill-opacity="0.25"/>
+<!-- Motion arrows (push outward) -->
+<defs>
+  <marker id="ao" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#2DC653"/>
+  </marker>
+  <marker id="ar" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#F26419"/>
+  </marker>
+</defs>
+<line x1="72" y1="99" x2="52" y2="99" stroke="#F26419" stroke-width="2.5" stroke-dasharray="3,2" marker-end="url(#ar)"/>
+<line x1="248" y1="99" x2="268" y2="99" stroke="#F26419" stroke-width="2.5" stroke-dasharray="3,2" marker-end="url(#ar)"/>
+<!-- Labels -->
+<rect x="30" y="53" width="70" height="16" fill="#F26419" fill-opacity="0.2" rx="4"/>
+<text x="65" y="64" text-anchor="middle" fill="#F26419" font-size="10" font-family="system-ui">← 밀어내기 →</text>
+<rect x="118" y="168" width="84" height="15" fill="#1E2740" rx="4"/>
+<text x="160" y="178" text-anchor="middle" fill="#9CA3AF" font-size="10" font-family="system-ui">발바닥 바닥에 고정</text>
+<text x="160" y="220" text-anchor="middle" fill="#6B7280" font-size="11" font-family="system-ui,sans-serif">체스트프레스 머신</text>
+</svg>`,
+  latpulldown: `<svg viewBox="0 0 320 230" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:320px">
+<rect width="320" height="230" fill="#0F1628" rx="14"/>
+<!-- Top frame -->
+<rect x="130" y="10" width="60" height="10" fill="#374151" rx="3" stroke="#4A5568" stroke-width="1"/>
+<rect x="152" y="20" width="16" height="60" fill="#374151" rx="3"/>
+<!-- Pulley -->
+<circle cx="160" cy="84" r="8" fill="#4A5568" stroke="#718096" stroke-width="1.5"/>
+<circle cx="160" cy="84" r="3" fill="#9CA3AF"/>
+<!-- Cable -->
+<line x1="160" y1="92" x2="160" y2="112" stroke="#9CA3AF" stroke-width="2.5"/>
+<!-- Bar -->
+<rect x="85" y="112" width="150" height="10" fill="#718096" rx="4" stroke="#9CA3AF" stroke-width="1"/>
+<!-- Angled grips -->
+<rect x="82" y="108" width="22" height="8" fill="#9CA3AF" rx="3" transform="rotate(-15 93 112)"/>
+<rect x="216" y="108" width="22" height="8" fill="#9CA3AF" rx="3" transform="rotate(15 227 112)"/>
+<!-- Weight stack on side -->
+<rect x="40" y="60" width="18" height="80" fill="#1E2740" rx="3" stroke="#374151" stroke-width="1"/>
+<rect x="40" y="60" width="18" height="45" fill="#2EC4B6" rx="3"/>
+<line x1="49" y1="20" x2="49" y2="60" stroke="#374151" stroke-width="2" stroke-dasharray="3,2"/>
+<!-- Thigh pad -->
+<rect x="125" y="165" width="70" height="14" fill="#374151" rx="5" stroke="#4A5568" stroke-width="1.5"/>
+<!-- Seat -->
+<rect x="120" y="175" width="80" height="18" fill="#2D3748" rx="5" stroke="#4A5568" stroke-width="1.5"/>
+<!-- Person -->
+<circle cx="160" cy="138" r="16" fill="#C8956C" stroke="#A07850" stroke-width="1.5"/>
+<ellipse cx="160" cy="130" rx="14" ry="10" fill="#2D1B0E"/>
+<!-- Body (slight lean back) -->
+<rect x="144" y="154" width="32" height="55" fill="#3B82F6" rx="7"/>
+<rect x="146" y="156" width="28" height="18" fill="#60A5FA" rx="5"/>
+<!-- Arms reaching up to bar -->
+<path d="M148 158 Q118 140 100 117" stroke="#3B82F6" stroke-width="11" stroke-linecap="round" fill="none"/>
+<path d="M172 158 Q202 140 220 117" stroke="#3B82F6" stroke-width="11" stroke-linecap="round" fill="none"/>
+<path d="M148 158 Q118 140 100 117" stroke="#C8956C" stroke-width="6" stroke-linecap="round" fill="none"/>
+<path d="M172 158 Q202 140 220 117" stroke="#C8956C" stroke-width="6" stroke-linecap="round" fill="none"/>
+<!-- Legs under pad -->
+<path d="M150 208 L138 228" stroke="#1E40AF" stroke-width="12" stroke-linecap="round"/>
+<path d="M170 208 L182 228" stroke="#1E40AF" stroke-width="12" stroke-linecap="round"/>
+<!-- Back highlight -->
+<ellipse cx="160" cy="170" rx="16" ry="22" fill="#2EC4B6" fill-opacity="0.2"/>
+<defs>
+  <marker id="ad" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#2EC4B6"/>
+  </marker>
+</defs>
+<line x1="160" y1="95" x2="160" y2="148" stroke="#F26419" stroke-width="2.5" stroke-dasharray="4,3" marker-end="url(#ad)"/>
+<text x="168" y="125" fill="#F26419" font-size="10" font-family="system-ui">당기기</text>
+<rect x="100" y="180" width="120" height="14" fill="#1E2740" rx="4"/>
+<text x="160" y="190" text-anchor="middle" fill="#9CA3AF" font-size="10" font-family="system-ui">가슴쪽으로 당기기</text>
+<text x="160" y="220" text-anchor="middle" fill="#6B7280" font-size="11" font-family="system-ui,sans-serif">랫풀다운 머신</text>
+</svg>`,
+  shoulderpress: `<svg viewBox="0 0 320 230" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:320px">
+<rect width="320" height="230" fill="#0F1628" rx="14"/>
+<!-- Machine outer frame -->
+<rect x="70" y="40" width="180" height="150" fill="#1E2740" rx="8" stroke="#374151" stroke-width="2"/>
+<!-- Back pad -->
+<rect x="110" y="75" width="100" height="80" fill="#2D3748" rx="6" stroke="#4A5568" stroke-width="1.5"/>
+<rect x="114" y="79" width="92" height="35" fill="#374151" rx="4"/>
+<!-- Seat -->
+<rect x="105" y="152" width="110" height="18" fill="#2D3748" rx="5" stroke="#4A5568" stroke-width="1.5"/>
+<!-- Handles (pushing up position) -->
+<rect x="72" y="85" width="40" height="11" fill="#718096" rx="4" stroke="#9CA3AF" stroke-width="1"/>
+<rect x="208" y="85" width="40" height="11" fill="#718096" rx="4" stroke="#9CA3AF" stroke-width="1"/>
+<line x1="88" y1="85" x2="88" y2="62" stroke="#718096" stroke-width="5" stroke-linecap="round"/>
+<line x1="232" y1="85" x2="232" y2="62" stroke="#718096" stroke-width="5" stroke-linecap="round"/>
+<!-- Weight stack -->
+<rect x="44" y="80" width="16" height="80" fill="#1E2740" rx="3" stroke="#374151" stroke-width="1"/>
+<rect x="44" y="80" width="16" height="40" fill="#9B51E0" rx="3"/>
+<!-- Person -->
+<circle cx="160" cy="65" r="16" fill="#C8956C" stroke="#A07850" stroke-width="1.5"/>
+<ellipse cx="160" cy="57" rx="14" ry="10" fill="#2D1B0E"/>
+<!-- Body -->
+<rect x="144" y="81" width="32" height="66" fill="#3B82F6" rx="7"/>
+<!-- Arms up pressing handles -->
+<path d="M145 92 L98 88" stroke="#3B82F6" stroke-width="11" stroke-linecap="round"/>
+<path d="M175 92 L222 88" stroke="#3B82F6" stroke-width="11" stroke-linecap="round"/>
+<path d="M145 92 L98 88" stroke="#C8956C" stroke-width="5" stroke-linecap="round"/>
+<path d="M175 92 L222 88" stroke="#C8956C" stroke-width="5" stroke-linecap="round"/>
+<line x1="98" y1="88" x2="96" y2="64" stroke="#C8956C" stroke-width="9" stroke-linecap="round"/>
+<line x1="222" y1="88" x2="224" y2="64" stroke="#C8956C" stroke-width="9" stroke-linecap="round"/>
+<!-- Legs -->
+<path d="M152 147 L142 185" stroke="#1E40AF" stroke-width="12" stroke-linecap="round"/>
+<path d="M168 147 L178 185" stroke="#1E40AF" stroke-width="12" stroke-linecap="round"/>
+<ellipse cx="138" cy="188" rx="15" ry="6" fill="#111827" stroke="#374151" stroke-width="1"/>
+<ellipse cx="182" cy="188" rx="15" ry="6" fill="#111827" stroke="#374151" stroke-width="1"/>
+<!-- Shoulder highlight -->
+<circle cx="102" cy="88" r="12" fill="#9B51E0" fill-opacity="0.3"/>
+<circle cx="218" cy="88" r="12" fill="#9B51E0" fill-opacity="0.3"/>
+<defs>
+  <marker id="au" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#9B51E0"/>
+  </marker>
+</defs>
+<line x1="90" y1="80" x2="90" y2="55" stroke="#9B51E0" stroke-width="2.5" marker-end="url(#au)"/>
+<line x1="230" y1="80" x2="230" y2="55" stroke="#9B51E0" stroke-width="2.5" marker-end="url(#au)"/>
+<rect x="90" y="30" width="140" height="14" fill="#1E2740" rx="4"/>
+<text x="160" y="40" text-anchor="middle" fill="#9B51E0" font-size="10" font-family="system-ui">↑ 어깨 힘으로 밀기 ↑</text>
+<text x="160" y="220" text-anchor="middle" fill="#6B7280" font-size="11" font-family="system-ui,sans-serif">숄더프레스 머신</text>
+</svg>`,
+  cablepushdown: `<svg viewBox="0 0 320 230" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:320px">
+<rect width="320" height="230" fill="#0F1628" rx="14"/>
+<!-- Cable tower -->
+<rect x="140" y="8" width="40" height="90" fill="#2D3748" rx="5" stroke="#4A5568" stroke-width="1.5"/>
+<rect x="143" y="11" width="34" height="50" fill="#374151" rx="4"/>
+<!-- Pulley at top -->
+<circle cx="160" cy="98" r="9" fill="#4A5568" stroke="#718096" stroke-width="1.5"/>
+<circle cx="160" cy="98" r="3.5" fill="#9CA3AF"/>
+<!-- Cable -->
+<line x1="160" y1="107" x2="160" y2="130" stroke="#9CA3AF" stroke-width="2.5"/>
+<!-- Rope attachment -->
+<path d="M150 130 L160 140 L170 130" stroke="#718096" stroke-width="4" stroke-linecap="round" fill="none"/>
+<!-- Weight stack side -->
+<rect x="88" y="30" width="18" height="100" fill="#1E2740" rx="3" stroke="#374151" stroke-width="1"/>
+<rect x="88" y="30" width="18" height="55" fill="#F26419" rx="3"/>
+<line x1="97" y1="10" x2="97" y2="30" stroke="#374151" stroke-width="2.5" stroke-dasharray="3,2"/>
+<!-- Person standing -->
+<!-- Head -->
+<circle cx="160" cy="62" r="16" fill="#C8956C" stroke="#A07850" stroke-width="1.5"/>
+<ellipse cx="160" cy="54" rx="14" ry="10" fill="#2D1B0E"/>
+<!-- Body slight forward lean -->
+<rect x="145" y="78" width="30" height="70" fill="#3B82F6" rx="7" transform="rotate(-3 160 113)"/>
+<!-- Upper arms locked to sides -->
+<line x1="147" y1="95" x2="130" y2="120" stroke="#3B82F6" stroke-width="11" stroke-linecap="round"/>
+<line x1="173" y1="95" x2="190" y2="120" stroke="#3B82F6" stroke-width="11" stroke-linecap="round"/>
+<!-- Forearms going DOWN to rope -->
+<line x1="130" y1="120" x2="148" y2="138" stroke="#3B82F6" stroke-width="10" stroke-linecap="round"/>
+<line x1="190" y1="120" x2="172" y2="138" stroke="#3B82F6" stroke-width="10" stroke-linecap="round"/>
+<line x1="130" y1="120" x2="148" y2="138" stroke="#C8956C" stroke-width="5" stroke-linecap="round"/>
+<line x1="190" y1="120" x2="172" y2="138" stroke="#C8956C" stroke-width="5" stroke-linecap="round"/>
+<!-- Elbow markers -->
+<circle cx="130" cy="120" r="7" fill="none" stroke="#F26419" stroke-width="2.5"/>
+<circle cx="190" cy="120" r="7" fill="none" stroke="#F26419" stroke-width="2.5"/>
+<!-- Legs -->
+<line x1="153" y1="148" x2="142" y2="195" stroke="#1E40AF" stroke-width="12" stroke-linecap="round"/>
+<line x1="167" y1="148" x2="178" y2="195" stroke="#1E40AF" stroke-width="12" stroke-linecap="round"/>
+<ellipse cx="138" cy="198" rx="16" ry="7" fill="#111827" stroke="#374151" stroke-width="1"/>
+<ellipse cx="182" cy="198" rx="16" ry="7" fill="#111827" stroke="#374151" stroke-width="1"/>
+<!-- Tricep highlight -->
+<ellipse cx="130" cy="128" rx="13" ry="16" fill="#F26419" fill-opacity="0.25"/>
+<ellipse cx="190" cy="128" rx="13" ry="16" fill="#F26419" fill-opacity="0.25"/>
+<defs>
+  <marker id="adn" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#F26419"/>
+  </marker>
+</defs>
+<!-- Elbow label -->
+<rect x="200" y="112" width="90" height="14" fill="#1E2740" rx="4"/>
+<text x="245" y="122" text-anchor="middle" fill="#F26419" font-size="10" font-family="system-ui">팔꿈치 고정!</text>
+<line x1="197" y1="120" x2="208" y2="119" stroke="#F26419" stroke-width="1.5"/>
+<rect x="75" y="168" width="170" height="14" fill="#1E2740" rx="4"/>
+<text x="160" y="178" text-anchor="middle" fill="#9CA3AF" font-size="10" font-family="system-ui">팔꿈치만 고정, 아래로 쭉 펴기</text>
+<text x="160" y="220" text-anchor="middle" fill="#6B7280" font-size="11" font-family="system-ui,sans-serif">케이블 푸쉬다운</text>
+</svg>`,
+  dumbbellcurl: `<svg viewBox="0 0 320 230" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:320px">
+<rect width="320" height="230" fill="#0F1628" rx="14"/>
+<!-- Floor line -->
+<line x1="40" y1="200" x2="280" y2="200" stroke="#374151" stroke-width="1.5"/>
+<!-- Left arm - hanging down with dumbbell -->
+<!-- Dumbbell left -->
+<rect x="48" y="175" width="46" height="12" fill="#718096" rx="4" stroke="#9CA3AF" stroke-width="1"/>
+<rect x="44" y="168" width="14" height="26" fill="#4A5568" rx="4" stroke="#6B7280" stroke-width="1"/>
+<rect x="78" y="168" width="14" height="26" fill="#4A5568" rx="4" stroke="#6B7280" stroke-width="1"/>
+<!-- Left arm hanging -->
+<line x1="85" y1="128" x2="82" y2="175" stroke="#3B82F6" stroke-width="11" stroke-linecap="round"/>
+<line x1="85" y1="128" x2="82" y2="175" stroke="#C8956C" stroke-width="5" stroke-linecap="round"/>
+<!-- Person body -->
+<circle cx="160" cy="52" r="18" fill="#C8956C" stroke="#A07850" stroke-width="1.5"/>
+<ellipse cx="160" cy="43" rx="16" ry="11" fill="#2D1B0E"/>
+<rect x="143" y="70" width="34" height="75" fill="#3B82F6" rx="8"/>
+<rect x="145" y="72" width="30" height="22" fill="#60A5FA" rx="6"/>
+<!-- Right arm curling up - elbow fixed -->
+<line x1="177" y1="90" x2="210" y2="115" stroke="#3B82F6" stroke-width="11" stroke-linecap="round"/>
+<!-- Forearm curled up 90+ deg -->
+<line x1="210" y1="115" x2="192" y2="72" stroke="#3B82F6" stroke-width="11" stroke-linecap="round"/>
+<line x1="177" y1="90" x2="210" y2="115" stroke="#C8956C" stroke-width="5" stroke-linecap="round"/>
+<line x1="210" y1="115" x2="192" y2="72" stroke="#C8956C" stroke-width="5" stroke-linecap="round"/>
+<!-- Dumbbell right (curled) -->
+<rect x="178" y="58" width="46" height="12" fill="#718096" rx="4" stroke="#9CA3AF" stroke-width="1"/>
+<rect x="174" y="51" width="14" height="26" fill="#4A5568" rx="4" stroke="#6B7280" stroke-width="1"/>
+<rect x="208" y="51" width="14" height="26" fill="#4A5568" rx="4" stroke="#6B7280" stroke-width="1"/>
+<!-- Bicep highlight right -->
+<ellipse cx="206" cy="102" rx="14" ry="20" fill="#2EC4B6" fill-opacity="0.3"/>
+<!-- Elbow marker right -->
+<circle cx="210" cy="115" r="8" fill="none" stroke="#F26419" stroke-width="2.5"/>
+<!-- Left shoulder/upper arm -->
+<line x1="143" y1="88" x2="110" y2="105" stroke="#3B82F6" stroke-width="11" stroke-linecap="round"/>
+<line x1="143" y1="88" x2="110" y2="105" stroke="#C8956C" stroke-width="5" stroke-linecap="round"/>
+<!-- Legs -->
+<line x1="152" y1="145" x2="140" y2="198" stroke="#1E40AF" stroke-width="13" stroke-linecap="round"/>
+<line x1="168" y1="145" x2="180" y2="198" stroke="#1E40AF" stroke-width="13" stroke-linecap="round"/>
+<ellipse cx="137" cy="201" rx="17" ry="7" fill="#111827" stroke="#374151" stroke-width="1"/>
+<ellipse cx="183" cy="201" rx="17" ry="7" fill="#111827" stroke="#374151" stroke-width="1"/>
+<defs>
+  <marker id="acu" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#2EC4B6"/>
+  </marker>
+</defs>
+<path d="M225 100 Q240 80 228 62" stroke="#2EC4B6" stroke-width="2.5" fill="none" marker-end="url(#acu)" stroke-dasharray="4,3"/>
+<text x="245" y="80" fill="#2EC4B6" font-size="10" font-family="system-ui">수축!</text>
+<rect x="85" y="93" width="80" height="14" fill="#1E2740" rx="4"/>
+<text x="125" y="103" text-anchor="middle" fill="#F26419" font-size="10" font-family="system-ui">팔꿈치 고정</text>
+<line x1="143" y1="110" x2="168" y2="100" stroke="#F26419" stroke-width="1.5"/>
+<text x="160" y="220" text-anchor="middle" fill="#6B7280" font-size="11" font-family="system-ui,sans-serif">덤벨 컬</text>
+</svg>`,
+  squat: `<svg viewBox="0 0 320 230" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:320px">
+<rect width="320" height="230" fill="#0F1628" rx="14"/>
+<!-- Floor -->
+<line x1="40" y1="205" x2="280" y2="205" stroke="#374151" stroke-width="1.5"/>
+<!-- Smith machine / squat rack frame -->
+<rect x="65" y="15" width="10" height="165" fill="#374151" rx="3" stroke="#4A5568" stroke-width="1"/>
+<rect x="245" y="15" width="10" height="165" fill="#374151" rx="3" stroke="#4A5568" stroke-width="1"/>
+<rect x="65" y="15" width="190" height="8" fill="#374151" rx="3"/>
+<!-- Barbell -->
+<rect x="52" y="88" width="216" height="9" fill="#718096" rx="4" stroke="#9CA3AF" stroke-width="1"/>
+<!-- Weight plates -->
+<rect x="50" y="78" width="18" height="29" fill="#4A5568" rx="5" stroke="#6B7280" stroke-width="1.5"/>
+<rect x="68" y="81" width="12" height="23" fill="#374151" rx="3" stroke="#6B7280" stroke-width="1"/>
+<rect x="252" y="78" width="18" height="29" fill="#4A5568" rx="5" stroke="#6B7280" stroke-width="1.5"/>
+<rect x="240" y="81" width="12" height="23" fill="#374151" rx="3" stroke="#6B7280" stroke-width="1"/>
+<!-- Person in squat position -->
+<!-- Head -->
+<circle cx="160" cy="65" r="17" fill="#C8956C" stroke="#A07850" stroke-width="1.5"/>
+<ellipse cx="160" cy="56" rx="15" ry="10" fill="#2D1B0E"/>
+<!-- Torso slightly forward -->
+<rect x="144" y="82" width="32" height="52" fill="#3B82F6" rx="7" transform="rotate(-5 160 108)"/>
+<rect x="146" y="84" width="28" height="20" fill="#60A5FA" rx="5" transform="rotate(-5 160 94)"/>
+<!-- Arms on bar -->
+<line x1="148" y1="95" x2="100" y2="93" stroke="#3B82F6" stroke-width="10" stroke-linecap="round"/>
+<line x1="172" y1="95" x2="220" y2="93" stroke="#3B82F6" stroke-width="10" stroke-linecap="round"/>
+<line x1="148" y1="95" x2="100" y2="93" stroke="#C8956C" stroke-width="5" stroke-linecap="round"/>
+<line x1="172" y1="95" x2="220" y2="93" stroke="#C8956C" stroke-width="5" stroke-linecap="round"/>
+<!-- Thighs (parallel/below) -->
+<line x1="150" y1="132" x2="108" y2="160" stroke="#1E40AF" stroke-width="15" stroke-linecap="round"/>
+<line x1="170" y1="132" x2="212" y2="160" stroke="#1E40AF" stroke-width="15" stroke-linecap="round"/>
+<!-- Shins -->
+<line x1="108" y1="160" x2="112" y2="202" stroke="#1E40AF" stroke-width="13" stroke-linecap="round"/>
+<line x1="212" y1="160" x2="208" y2="202" stroke="#1E40AF" stroke-width="13" stroke-linecap="round"/>
+<!-- Feet -->
+<ellipse cx="109" cy="204" rx="22" ry="8" fill="#111827" stroke="#374151" stroke-width="1"/>
+<ellipse cx="210" cy="204" rx="22" ry="8" fill="#111827" stroke="#374151" stroke-width="1"/>
+<!-- Knee markers -->
+<circle cx="110" cy="160" r="10" fill="none" stroke="#2EC4B6" stroke-width="2.5"/>
+<circle cx="210" cy="160" r="10" fill="none" stroke="#2EC4B6" stroke-width="2.5"/>
+<!-- Quad highlight -->
+<ellipse cx="127" cy="155" rx="18" ry="26" fill="#FFD166" fill-opacity="0.2"/>
+<ellipse cx="193" cy="155" rx="18" ry="26" fill="#FFD166" fill-opacity="0.2"/>
+<!-- Knee-toe alignment arrows -->
+<line x1="107" y1="196" x2="92" y2="172" stroke="#2EC4B6" stroke-width="1.5" stroke-dasharray="3,2"/>
+<text x="52" y="168" fill="#2EC4B6" font-size="9.5" font-family="system-ui">무릎→발끝</text>
+<text x="48" y="179" fill="#2EC4B6" font-size="9.5" font-family="system-ui">방향 일치</text>
+<!-- Depth indicator -->
+<line x1="36" y1="132" x2="36" y2="205" stroke="#F26419" stroke-width="2" stroke-dasharray="3,2"/>
+<text x="12" y="170" fill="#F26419" font-size="9.5" font-family="system-ui" transform="rotate(-90 20 170)">깊이</text>
+<text x="160" y="220" text-anchor="middle" fill="#6B7280" font-size="11" font-family="system-ui,sans-serif">스쿼트 (스미스머신 or 바벨랙)</text>
+</svg>`,
+  cardio: `<svg viewBox="0 0 320 230" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:320px">
+<rect width="320" height="230" fill="#0F1628" rx="14"/>
+<!-- Treadmill machine -->
+<rect x="45" y="175" width="230" height="28" fill="#2D3748" rx="9" stroke="#4A5568" stroke-width="2"/>
+<rect x="52" y="180" width="216" height="16" fill="#374151" rx="6"/>
+<!-- Belt lines -->
+<line x1="72" y1="181" x2="72" y2="195" stroke="#4A5568" stroke-width="1.5"/>
+<line x1="102" y1="181" x2="102" y2="195" stroke="#4A5568" stroke-width="1.5"/>
+<line x1="132" y1="181" x2="132" y2="195" stroke="#4A5568" stroke-width="1.5"/>
+<line x1="162" y1="181" x2="162" y2="195" stroke="#4A5568" stroke-width="1.5"/>
+<line x1="192" y1="181" x2="192" y2="195" stroke="#4A5568" stroke-width="1.5"/>
+<line x1="222" y1="181" x2="222" y2="195" stroke="#4A5568" stroke-width="1.5"/>
+<line x1="252" y1="181" x2="252" y2="195" stroke="#4A5568" stroke-width="1.5"/>
+<!-- Side rails of treadmill -->
+<rect x="45" y="175" width="22" height="28" fill="#2D3748" rx="5"/>
+<rect x="253" y="175" width="22" height="28" fill="#2D3748" rx="5"/>
+<!-- Handle bars -->
+<line x1="90" y1="175" x2="90" y2="90" stroke="#4A5568" stroke-width="8" stroke-linecap="round"/>
+<line x1="230" y1="175" x2="230" y2="90" stroke="#4A5568" stroke-width="8" stroke-linecap="round"/>
+<rect x="83" y="84" width="154" height="12" fill="#374151" rx="5" stroke="#4A5568" stroke-width="1.5"/>
+<!-- Console -->
+<rect x="130" y="60" width="60" height="38" fill="#1E2740" rx="6" stroke="#374151" stroke-width="1.5"/>
+<rect x="134" y="64" width="52" height="28" fill="#0D2A2A" rx="4"/>
+<text x="160" y="74" text-anchor="middle" fill="#2EC4B6" font-size="9" font-family="system-ui,monospace" font-weight="700">6.5 km/h</text>
+<text x="160" y="85" text-anchor="middle" fill="#2EC4B6" font-size="8" font-family="system-ui">30:00</text>
+<!-- Running person -->
+<!-- Head -->
+<circle cx="165" cy="108" r="16" fill="#C8956C" stroke="#A07850" stroke-width="1.5"/>
+<ellipse cx="165" cy="100" rx="14" ry="10" fill="#2D1B0E"/>
+<!-- Body -->
+<rect x="149" y="124" width="32" height="55" fill="#3B82F6" rx="7"/>
+<!-- Running legs -->
+<line x1="155" y1="179" x2="132" y2="152" stroke="#1E40AF" stroke-width="14" stroke-linecap="round"/>
+<line x1="132" y1="152" x2="140" y2="176" stroke="#1E40AF" stroke-width="12" stroke-linecap="round"/>
+<line x1="175" y1="179" x2="198" y2="148" stroke="#1E40AF" stroke-width="14" stroke-linecap="round"/>
+<line x1="198" y1="148" x2="188" y2="176" stroke="#1E40AF" stroke-width="12" stroke-linecap="round"/>
+<!-- Running arm swing -->
+<line x1="151" y1="135" x2="122" y2="148" stroke="#3B82F6" stroke-width="10" stroke-linecap="round"/>
+<line x1="179" y1="135" x2="208" y2="148" stroke="#3B82F6" stroke-width="10" stroke-linecap="round"/>
+<!-- Interval indicators -->
+<rect x="35" y="148" width="44" height="24" fill="#E6394620" rx="6" stroke="#E6394640" stroke-width="1"/>
+<text x="57" y="157" text-anchor="middle" fill="#E63946" font-size="8" font-family="system-ui" font-weight="700">고강도</text>
+<text x="57" y="167" text-anchor="middle" fill="#E63946" font-size="8" font-family="system-ui">30초</text>
+<rect x="35" y="175" width="44" height="24" fill="#2EC4B620" rx="6" stroke="#2EC4B640" stroke-width="1"/>
+<text x="57" y="184" text-anchor="middle" fill="#2EC4B6" font-size="8" font-family="system-ui" font-weight="700">회복</text>
+<text x="57" y="194" text-anchor="middle" fill="#2EC4B6" font-size="8" font-family="system-ui">90초</text>
+<text x="160" y="220" text-anchor="middle" fill="#6B7280" font-size="11" font-family="system-ui,sans-serif">트레드밀 (러닝머신)</text>
+</svg>`,
+  core: `<svg viewBox="0 0 320 230" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:320px">
+<rect width="320" height="230" fill="#0F1628" rx="14"/>
+<!-- Mat -->
+<rect x="35" y="175" width="250" height="14" fill="#374151" rx="5" stroke="#4A5568" stroke-width="1.5"/>
+<rect x="38" y="177" width="244" height="8" fill="#1E3040" rx="3"/>
+<!-- PLANK POSITION person -->
+<!-- Body in plank -->
+<rect x="90" y="155" width="130" height="20" fill="#3B82F6" rx="6" transform="rotate(-2 155 165)"/>
+<!-- Head -->
+<circle cx="230" cy="152" r="14" fill="#C8956C" stroke="#A07850" stroke-width="1.5"/>
+<ellipse cx="230" cy="145" rx="12" ry="9" fill="#2D1B0E"/>
+<!-- Forearms on ground -->
+<line x1="102" y1="168" x2="95" y2="178" stroke="#C8956C" stroke-width="10" stroke-linecap="round"/>
+<line x1="102" y1="168" x2="95" y2="178" stroke="#3B82F6" stroke-width="5" stroke-linecap="round"/>
+<!-- Toes -->
+<ellipse cx="88" cy="173" rx="9" ry="4" fill="#111827" stroke="#374151" stroke-width="1"/>
+<!-- Core highlight plank -->
+<ellipse cx="158" cy="162" rx="52" ry="9" fill="#FF6B35" fill-opacity="0.25"/>
+<!-- Body alignment arrow -->
+<defs>
+  <marker id="alin" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+    <path d="M0,0 L7,3.5 L0,7 Z" fill="#2DC653"/>
+  </marker>
+</defs>
+<line x1="85" y1="145" x2="238" y2="145" stroke="#2DC653" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#alin)"/>
+<text x="155" y="138" text-anchor="middle" fill="#2DC653" font-size="9.5" font-family="system-ui">일직선 유지!</text>
+<!-- Warning: no butt up -->
+<path d="M148 130 Q158 110 165 128" stroke="#E63946" stroke-width="2" fill="none" stroke-dasharray="3,2"/>
+<circle cx="156" cy="120" r="8" fill="none" stroke="#E63946" stroke-width="1.5"/>
+<line x1="151" y1="115" x2="161" y2="125" stroke="#E63946" stroke-width="1.5"/>
+<text x="148" y="110" text-anchor="middle" fill="#E63946" font-size="8" font-family="system-ui">엉덩이 X</text>
+<!-- Elbow position -->
+<circle cx="95" cy="175" r="7" fill="none" stroke="#F26419" stroke-width="2"/>
+<text x="68" y="172" fill="#F26419" font-size="8.5" font-family="system-ui" text-anchor="middle">팔꿈치</text>
+<!-- CRUNCH mini illustration at top -->
+<rect x="40" y="25" width="240" height="90" fill="#141829" rx="8" stroke="#1E2440" stroke-width="1"/>
+<text x="160" y="40" text-anchor="middle" fill="#9CA3AF" font-size="9" font-family="system-ui">크런치</text>
+<!-- Mat crunch -->
+<ellipse cx="80" cy="80" rx="40" ry="8" fill="#2D3748" rx="4"/>
+<!-- Person lying -->
+<line x1="60" y1="72" x2="140" y2="72" stroke="#1E40AF" stroke-width="12" stroke-linecap="round"/>
+<!-- Knees bent -->
+<line x1="80" y1="72" x2="88" y2="56" stroke="#1E40AF" stroke-width="11" stroke-linecap="round"/>
+<line x1="110" y1="72" x2="118" y2="56" stroke="#1E40AF" stroke-width="11" stroke-linecap="round"/>
+<line x1="88" y1="56" x2="78" y2="72" stroke="#1E40AF" stroke-width="10" stroke-linecap="round"/>
+<line x1="118" y1="56" x2="110" y2="72" stroke="#1E40AF" stroke-width="10" stroke-linecap="round"/>
+<!-- Upper body lifted -->
+<line x1="60" y1="72" x2="75" y2="58" stroke="#3B82F6" stroke-width="12" stroke-linecap="round"/>
+<circle cx="83" cy="52" r="11" fill="#C8956C" stroke="#A07850" stroke-width="1.5"/>
+<!-- Core highlight crunch -->
+<ellipse cx="88" cy="68" rx="20" ry="7" fill="#FF6B35" fill-opacity="0.3"/>
+<!-- Crunch arrow -->
+<path d="M60 82 Q70 88 75 78" stroke="#FF6B35" stroke-width="2" fill="none" marker-end="url(#alin)"/>
+<!-- Right side: timer info -->
+<text x="210" y="58" fill="#FFD166" font-size="10" font-family="system-ui" font-weight="700">30초 버티기</text>
+<rect x="195" y="62" width="80" height="12" fill="#1E2740" rx="3"/>
+<text x="235" y="71" text-anchor="middle" fill="#9CA3AF" font-size="9" font-family="system-ui">× 3세트</text>
+<rect x="195" y="77" width="80" height="12" fill="#1E2740" rx="3"/>
+<text x="235" y="86" text-anchor="middle" fill="#9CA3AF" font-size="9" font-family="system-ui">크런치 15회 × 3</text>
+<text x="160" y="220" text-anchor="middle" fill="#6B7280" font-size="11" font-family="system-ui,sans-serif">플랭크 + 크런치 (매트)</text>
+</svg>`,
+};
+
+// ── STORAGE (memory-first, localStorage as bonus) ──────────────────────────
+const MEM = {};
+function sGet(k){ return MEM[k]!==undefined ? MEM[k] : (function(){ try{var v=localStorage.getItem(k);if(v!==null)MEM[k]=v;return v;}catch(e){return null;} })(); }
+function sSet(k,v){ MEM[k]=v; try{localStorage.setItem(k,v);}catch(e){} }
+
+// ── DATA ──────────────────────────────────────────────────────────────────
+const START = new Date(2026,4,3);
+
+const PLAN = [
+  {day:'일',full:'일요일',type:'upper_a',label:'상체 A + 유산소',emoji:'💪',color:'#FF6B35',
+   exs:['bench','cablepushdown','cardio'],note:'가슴+삼두 웨이트 → 바로 유산소. 유산소 ①'},
+  {day:'월',full:'월요일',type:'cardio',label:'유산소 전용',emoji:'🏃',color:'#2DC653',
+   exs:['cardio','core'],note:'유산소 전용일. 영상 따라하고 코어 마무리. 유산소 ②'},
+  {day:'화',full:'화요일',type:'upper_b',label:'상체 B',emoji:'💪',color:'#2EC4B6',
+   exs:['latpulldown','dumbbellcurl'],note:'등+이두 집중. 오늘은 웨이트만.'},
+  {day:'수',full:'수요일',type:'rest',label:'완전 휴식',emoji:'😴',color:'#555E7A',
+   exs:[],note:'평일 휴식! 스트레칭 10분만.'},
+  {day:'목',full:'목요일',type:'shoulder',label:'어깨+코어 + 유산소',emoji:'🔥',color:'#9B51E0',
+   exs:['shoulderpress','core','cardio'],note:'어깨+코어 → 유산소. 유산소 ③'},
+  {day:'금',full:'금요일',type:'cardio',label:'유산소 전용',emoji:'🏃',color:'#2DC653',
+   exs:['cardio','core'],note:'주간 4번째 유산소. 유산소 ④'},
+  {day:'토',full:'토요일',type:'lower',label:'하체 미니멈',emoji:'🦵',color:'#FFD166',
+   exs:['squat'],note:'스쿼트 3세트만. 가볍고 빠르게.'}
+];
+
+const EX = {
+  bench:{videoUrl:'https://www.youtube.com/watch?v=nbuBu00A7yY',name:'체스트프레스 머신',icon:'🏋️',target:'가슴 (대흉근)',color:'#FF6B35',
+    dur:'약 20분',kcal:'60~80 kcal',benefits:['가슴 볼륨','팔 두께','상체 힘'],
+    sets:'3세트 × 12~15회',rest:'세트 사이 90초',weight:'시작: 15~20kg',
+    steps:['시트에 앉아 등을 완전히 밀착. 발바닥은 바닥에 딱.','그립은 어깨너비보다 살짝 넓게. 손목 꺾이지 않게.','숨 들이쉬며 천천히 가슴 쪽으로 내리기 (2초).','내쉬며 힘차게 밀어올리기. 가슴 안쪽을 쥐어짜는 느낌!','팔꿈치 80도 각도 유지.'],
+    mistakes:['팔로만 밀면 가슴 자극 없음','등이 뜨면서 반동 쓰기','너무 빠르게 내리기'],
+    tip:'마지막 2회가 살짝 힘들면 딱 맞는 무게.'},
+  latpulldown:{videoUrl:'https://www.youtube.com/watch?v=OwevV94sVO0',name:'랫풀다운 머신',icon:'🔽',target:'등 (광배근)',color:'#2EC4B6',
+    dur:'약 18분',kcal:'55~70 kcal',benefits:['등 넓이','팔 두께','자세 교정'],
+    sets:'3세트 × 12~15회',rest:'세트 사이 90초',weight:'시작: 25~35kg',
+    steps:['패드를 허벅지에 딱 맞게 조절 후 착석.','그립은 어깨너비보다 넓게, 손목 일직선.','가슴 살짝 들고 약간 뒤로 기울여요 (10~15도).','바를 쇄골 아래로 당기기.','팔꿈치를 겨드랑이 쪽으로 내리는 느낌. 등으로 당기기!'],
+    mistakes:['팔로만 당기기','상체 너무 뒤로 젖혀 반동','너무 아래까지 당기기'],
+    tip:'이두보다 등이 먼저 힘들어야 폼이 맞음.'},
+  shoulderpress:{videoUrl:'https://www.youtube.com/watch?v=LERNxsyTM7M',name:'숄더프레스 머신',icon:'⬆️',target:'어깨 (삼각근)',color:'#9B51E0',
+    dur:'약 18분',kcal:'50~65 kcal',benefits:['어깨 넓이','측면 실루엣','팔 라인'],
+    sets:'3세트 × 12~15회',rest:'세트 사이 90초',weight:'시작: 10~15kg',
+    steps:['핸들이 어깨 높이에 오도록 시트 조절.','등을 등받이에 완전히 밀착. 코어 살짝 긴장.','팔꿈치 90도. 위로 밀 때 완전히 펴지 않아도 됨.','천천히 내리고 (2초), 올릴 때 어깨 힘으로.','목은 중립, 턱 살짝 당기기.'],
+    mistakes:['허리 과도하게 꺾기','승모근에 힘 들어가면 무게 낮추기','팔꿈치 완전히 펴서 관절 충격'],
+    tip:'마지막 세트에 어깨가 떨리면 딱 맞는 무게.'},
+  cablepushdown:{videoUrl:'https://www.youtube.com/watch?v=YapKOCYM-P8',name:'케이블 푸쉬다운',icon:'💪',target:'삼두근 (팔 뒤쪽)',color:'#FF6B35',
+    dur:'약 12분',kcal:'40~55 kcal',benefits:['팔 뒤쪽 라인','팔 두께','팔 선명도'],
+    sets:'3세트 × 12~15회',rest:'세트 사이 60초',weight:'시작: 10~15kg',
+    steps:['케이블 머신에 로프 or 바 어태치먼트 연결.','상체 살짝 앞으로 숙이고, 무릎 살짝 굽히기.','팔꿈치를 몸 옆에 완전히 고정!','팔꿈치만 구부려 아래로 밀기. 완전히 펴지는 것 확인.','천천히 올리며 삼두 늘어나는 느낌.'],
+    mistakes:['팔꿈치 앞으로 이동하면 어깨 개입','몸 전체 반동','끝까지 안 펴고 중간에서 돌아오기'],
+    tip:'팔 뒤쪽이 타는 느낌이 나야 제대로.'},
+  dumbbellcurl:{videoUrl:'https://www.youtube.com/watch?v=cOver4_h5Uw',name:'덤벨 컬',icon:'💪',target:'이두근 (팔 앞쪽)',color:'#2EC4B6',
+    dur:'약 12분',kcal:'35~50 kcal',benefits:['팔 앞쪽 근육','팔 볼륨','팔 선명도'],
+    sets:'3세트 × 12~15회',rest:'세트 사이 60초',weight:'시작: 5~8kg',
+    steps:['덤벨을 양손에 들고 자연스럽게 서기.','팔꿈치를 몸 옆에 고정. 팔꿈치만 구부리기.','올리면서 손목을 바깥으로 돌리기.','꼭대기에서 1초 멈추고 이두 꽉 수축.','천천히 내리기. 3~4초 소요.'],
+    mistakes:['팔꿈치 앞으로 나와 어깨 개입','몸 뒤로 젖혀 반동','너무 빠르게 올리고 내리기'],
+    tip:'상완에 피가 몰리는 느낌 = 제대로 하는 것.'},
+  squat:{videoUrl:'https://www.youtube.com/watch?v=y0qiC008K0g',name:'스쿼트 (바벨 or 스미스머신)',icon:'🦵',target:'대퇴사두 + 둔근',color:'#FFD166',
+    dur:'약 18분',kcal:'90~120 kcal',benefits:['허벅지 근력','엉덩이 라인','전신 대사 UP'],
+    sets:'3세트 × 15회',rest:'세트 사이 60초',weight:'스미스머신 20kg (빈 바)',
+    steps:['발 어깨너비, 발끝 30~45도 바깥.','가슴 펴고 허리 중립.','엉덩이 뒤로 빼며 천천히 앉기. 무릎이 발끝 방향과 일치.','허벅지가 지면과 평행 or 살짝 아래.','발뒤꿈치로 밀면서 올라오기.'],
+    mistakes:['무릎이 안쪽으로 모이기 (X자)','발뒤꿈치 뜨기','허리가 둥글게 말리기'],
+    tip:'스미스머신 처음엔 빈 바(20kg)로 자세 잡기. 2주마다 5~10kg씩 올리기.'},
+  cardio:{name:'유산소 (유튜브 영상)',icon:'🔥',target:'전신 지방 연소',color:'#2DC653',
+    dur:'30분 (→3주차 40분)',kcal:'200~280 kcal',benefits:['체지방 연소','심폐기능','혈액순환'],
+    sets:'1~2주차: 30분 / 3~4주차: 40분',rest:'영상 따라가면 됨',weight:'맨몸',
+    ytUrl:'https://youtu.be/O3GU4hMK75w?si=fjPZOumswmcGTVJo',
+    steps:['아래 버튼 눌러서 유튜브 영상 열기.','1~2주차는 30분만. 힘들면 잠깐 쉬어도 OK.','3주차부터 40분으로 늘리기.','운동 전 물 500ml 마시기.','운동 중간에도 수분 보충.'],
+    mistakes:['처음부터 40분 무리하기','물 안 마시기','영상 중간에 바로 멈추기'],
+    tip:'3주차에 30분이 쉽게 느껴지면 잘 하고 있는 것.'},
+  core:{videoUrl:'https://www.youtube.com/watch?v=60EtUkk9bx4',name:'플랭크 + 크런치 (매트)',icon:'🔥',target:'복근 + 코어 전체',color:'#FF6B35',
+    dur:'약 12분',kcal:'45~60 kcal',benefits:['복근 선명도','허리 보호','자세 교정'],
+    sets:'3세트 (플랭크 30초 + 크런치 15회)',rest:'세트 사이 45초',weight:'맨몸',
+    steps:['[플랭크] 팔꿈치와 발끝으로 버팁니다. 몸이 일직선.','[플랭크] 엉덩이 올리거나 처지지 않게.','[플랭크] 30초 버티기.','[크런치] 등을 매트에 대고 무릎 세우기.','[크런치] 복근의 힘으로 상체 들어올리기.'],
+    mistakes:['플랭크 시 엉덩이 올리기','크런치 시 목으로 당기기','숨 참기'],
+    tip:'플랭크 30초가 쉬우면 45초, 1분으로 늘리기.'}
+};
+
+const PROT_FOODS = [
+  {label:'계란',sub:'1개',g:6,icon:'🥚'},
+  {label:'소시지',sub:'굿닭 1개',g:19,icon:'🌭'},
+  {label:'참치캔',sub:'1캔',g:25,icon:'🐟'},
+  {label:'뉴치트',sub:'1포',g:20,icon:'🥤'},
+  {label:'닭가슴살',sub:'150g',g:35,icon:'🍗'},
+  {label:'고기/식사',sub:'1끼',g:25,icon:'🍖'}
+];
+
+// ── STATE ─────────────────────────────────────────────────────────────────
+let PAGE = 'today';
+let CURDATE = new Date();
+if(CURDATE < START) CURDATE = new Date(START);
+
+// ── KEY HELPERS ───────────────────────────────────────────────────────────
+function dateKey(d){ return d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate(); }
+function exKey(d,k){ return 'ex_'+dateKey(d)+'_'+k; }
+function weekKey(){ var d=new Date(),s=new Date(d);s.setDate(d.getDate()-d.getDay());return 'wk_'+s.getFullYear()+'_'+s.getMonth()+'_'+s.getDate(); }
+function protLogKey(d){ return 'pl_'+dateKey(d); }
+function sameDay(a,b){ return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate(); }
+
+// ── CHECKED ───────────────────────────────────────────────────────────────
+function isChecked(d,k){ return sGet(exKey(d,k))==='1'; }
+function setChecked(d,k,v){ sSet(exKey(d,k),v?'1':'0'); }
+function toggleChecked(d,k){ setChecked(d,k,!isChecked(d,k)); }
+
+// ── PROT LOG ──────────────────────────────────────────────────────────────
+function getProtLog(d){ try{return JSON.parse(sGet(protLogKey(d))||'[]');}catch(e){return [];} }
+function saveProtLog(d,log){ sSet(protLogKey(d),JSON.stringify(log)); }
+function addProtItem(d,g,name){ var l=getProtLog(d);l.push({g:g,name:name});saveProtLog(d,l); }
+function removeProtItem(d,idx){ var l=getProtLog(d);l.splice(idx,1);saveProtLog(d,l); }
+function resetProtLog(d){ saveProtLog(d,[]); }
+
+// ── DRINK ─────────────────────────────────────────────────────────────────
+function getDrinks(){ return parseInt(sGet(weekKey())||'0'); }
+function addDrink(){ sSet(weekKey(),getDrinks()+1); }
+function removeDrink(){ var c=getDrinks();if(c>0)sSet(weekKey(),c-1); }
+
+// ── PLAN HELPERS ──────────────────────────────────────────────────────────
+function planForDate(d){ return PLAN[d.getDay()]; }
+function isDayDone(d){ var p=planForDate(d);if(!p.exs.length)return true;return p.exs.every(function(k){return isChecked(d,k);}); }
+function weeklyStats(){ var done=0,total=0,today=new Date();for(var i=0;i<7;i++){var dd=new Date(today);dd.setDate(dd.getDate()-today.getDay()+i);var p=PLAN[i];total+=p.exs.length;p.exs.forEach(function(k){if(isChecked(dd,k))done++;});}return done+'/'+total; }
+function weekNum(){ return Math.max(1,Math.floor((new Date()-START)/(7*24*60*60*1000))+1); }
+function exportData(){
+  var data = {};
+  // Export all MEM keys + localStorage
+  var allKeys = Object.keys(MEM);
+  // also scan localStorage
+  try{
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(k) allKeys.push(k);
+    }
+  }catch(e){}
+  // dedupe
+  allKeys = allKeys.filter(function(k,i){return allKeys.indexOf(k)===i;});
+  allKeys.forEach(function(k){
+    var v=sGet(k);
+    if(v!==null) data[k]=v;
+  });
+  var json = JSON.stringify(data);
+  var b64 = btoa(unescape(encodeURIComponent(json)));
+  // Copy to clipboard
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(b64).then(function(){
+      var el=document.getElementById('backup-msg');
+      if(el){el.style.color='#FFD166';el.textContent='✓ 클립보드에 복사됨! Claude한테 업데이트 받은 후 가져오기에 붙여넣기';}
+    }).catch(function(){showExportFallback(b64);});
+  } else {
+    showExportFallback(b64);
+  }
+}
+
+function showExportFallback(b64){
+  var el=document.getElementById('backup-msg');
+  if(el){
+    el.style.color='#FFD166';
+    el.innerHTML='아래 코드를 복사하세요:<br><textarea style="width:100%;margin-top:6px;background:#0D1021;color:#FFD166;border:1px solid #FFD16640;border-radius:8px;padding:8px;font-size:10px;height:60px" readonly>'+b64+'</textarea>';
+  }
+}
+
+function importData(){
+  var code = prompt('내보내기에서 복사한 코드를 붙여넣으세요:');
+  if(!code||!code.trim()) return;
+  try{
+    var json = decodeURIComponent(escape(atob(code.trim())));
+    var data = JSON.parse(json);
+    Object.keys(data).forEach(function(k){ sSet(k,data[k]); });
+    var el=document.getElementById('backup-msg');
+    if(el){el.style.color='#2DC653';el.textContent='✓ 데이터 복원 완료! ('+Object.keys(data).length+'개 항목)';}
+    setTimeout(function(){render();},800);
+  }catch(e){
+    var el=document.getElementById('backup-msg');
+    if(el){el.style.color='#E63946';el.textContent='코드가 잘못되었어요. 다시 확인해주세요.';}
+  }
+}
+
+function getStreak(){ var s=0,today=new Date();for(var i=0;i<30;i++){var d=new Date(today);d.setDate(d.getDate()-i);if(d<START)break;if(isDayDone(d))s++;else if(i>0)break;}return s; }
+
+// ── RENDER ─────────────────────────────────────────────────────────────────
+function render(){
+  var el = document.getElementById('content');
+  var html = '';
+  if(PAGE==='today') html = renderToday();
+  else if(PAGE==='calendar') html = renderCalendar();
+  else html = renderResults();
+  el.innerHTML = html;
+}
+
+function H(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function renderToday(){
+  var d = CURDATE;
+  var p = planForDate(d);
+  var today = new Date();
+  var isToday = sameDay(d,today);
+  var dow = d.getDay();
+  var total = p.exs.length;
+  var done = p.exs.filter(function(k){return isChecked(d,k);}).length;
+  var prog = total>0 ? done/total : 1;
+  var allDone = total===0||done===total;
+
+  var totalMins=0, totalKcalMin=0, totalKcalMax=0;
+  p.exs.forEach(function(k){ var ex=EX[k];if(!ex)return;
+    var m=ex.dur.match(/\d+/);if(m)totalMins+=parseInt(m[0]);
+    var m2=ex.kcal.match(/(\d+)~(\d+)/);if(m2){totalKcalMin+=parseInt(m2[1]);totalKcalMax+=parseInt(m2[2]);}
+  });
+
+  var html = '<div style="padding:14px 18px 0">';
+
+  // Top bar
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+  html += '<div><div style="font-size:11px;color:#445;font-weight:700;letter-spacing:2px">성용님의 헬스 루틴</div>';
+  html += '<div style="font-size:21px;font-weight:800;letter-spacing:-.5px;margin-top:2px">Workout Tracker</div></div>';
+  html += '<div style="background:#1E2440;border-radius:12px;padding:8px 12px;border:1px solid #2A3055;text-align:center">';
+  html += '<div style="font-size:10px;color:#556">이번 주</div>';
+  html += '<div style="font-size:15px;font-weight:700;color:#FFD166">'+weeklyStats()+'</div></div></div>';
+
+  // Day tabs
+  html += '<div style="display:flex;gap:5px;margin-bottom:10px;overflow-x:auto;padding-bottom:2px">';
+  for(var i=0;i<7;i++){
+    var pd=PLAN[i];
+    var dd=new Date(d);dd.setDate(d.getDate()-(dow-i));
+    var isSel=i===dow;
+    var dayDone=isDayDone(dd);
+    html += '<button data-action="goday" data-dow="'+i+'" style="flex-shrink:0;width:50px;padding:9px 0;background:'+(isSel?pd.color:dayDone?'#1A2A1A':'#141829')+';border:'+(isSel?'none':'1px solid #1E2440')+';border-radius:14px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transform:'+(isSel?'scale(1.06)':'scale(1)')+';">';
+    html += '<span style="font-size:15px">'+(dayDone?'✅':pd.emoji)+'</span>';
+    html += '<span style="font-size:13px;font-weight:700;color:'+(isSel?'#fff':dayDone?'#3A6A3A':'#8090B0')+'">'+pd.day+'</span></button>';
+  }
+  html += '</div>';
+
+  // Date nav
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  html += '<button data-action="prevday" style="background:#1E2440;border:none;color:#8090B0;width:32px;height:32px;border-radius:50%;font-size:16px;cursor:pointer">‹</button>';
+  html += '<span style="font-size:13px;font-weight:600;color:#8098C8">'+(d.getMonth()+1)+'월 '+d.getDate()+'일 ('+p.day+')'+(isToday?' · 오늘':'')+'</span>';
+  html += '<button data-action="nextday" style="background:#1E2440;border:none;color:#8090B0;width:32px;height:32px;border-radius:50%;font-size:16px;cursor:pointer">›</button>';
+  html += '</div>';
+
+  // Day header
+  html += '<div style="background:linear-gradient(135deg,'+p.color+'20,'+p.color+'08);border:1px solid '+p.color+'30;border-radius:18px;padding:16px;margin-bottom:12px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+  html += '<div><div style="font-size:13px;color:'+p.color+';font-weight:700">'+p.full+'</div>';
+  html += '<div style="font-size:20px;font-weight:800;margin-top:2px">'+p.emoji+' '+p.label+'</div></div>';
+  if(total>0){
+    var circ=2*Math.PI*20;
+    html += '<div style="position:relative;width:48px;height:48px"><svg width="48" height="48" viewBox="0 0 48 48" style="transform:rotate(-90deg)">';
+    html += '<circle cx="24" cy="24" r="20" fill="none" stroke="#1E2440" stroke-width="4"/>';
+    html += '<circle cx="24" cy="24" r="20" fill="none" stroke="'+(allDone?'#2DC653':p.color)+'" stroke-width="4" stroke-dasharray="'+circ+'" stroke-dashoffset="'+(circ*(1-prog))+'" stroke-linecap="round"/>';
+    html += '</svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:'+(allDone?'#2DC653':p.color)+'">'+(allDone?'✓':done+'/'+total)+'</div></div>';
+  }
+  html += '</div>';
+  html += '<div style="font-size:12px;color:#8898BB;line-height:1.5;margin-top:8px">'+p.note+'</div>';
+  if(total>0){
+    html += '<div style="height:4px;background:#ffffff10;border-radius:4px;overflow:hidden;margin-top:10px">';
+    html += '<div style="height:100%;width:'+(prog*100)+'%;background:'+(allDone?'#2DC653':p.color)+';border-radius:4px"></div></div>';
+  }
+  html += '</div>';
+
+  // Time/calorie summary
+  if(total>0){
+    html += '<div style="display:flex;gap:8px;margin-bottom:12px">';
+    html += '<div style="flex:1;background:#1A1E32;border:1px solid #242848;border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:8px"><span style="font-size:18px">⏱</span><div><div style="font-size:10px;color:#445;font-weight:600">예상 총 시간</div><div style="font-size:15px;font-weight:800;color:#fff">약 '+totalMins+'분</div></div></div>';
+    html += '<div style="flex:1;background:#1A1210;border:1px solid #382010;border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:8px"><span style="font-size:18px">🔥</span><div><div style="font-size:10px;color:#FF6B35;font-weight:600">예상 칼로리</div><div style="font-size:15px;font-weight:800;color:#FF6B35">'+totalKcalMin+'~'+totalKcalMax+' kcal</div></div></div>';
+    html += '</div>';
+  }
+
+  // Exercises
+  if(p.type==='rest'){
+    html += '<div style="text-align:center;padding:36px 20px;color:#4A5580"><div style="font-size:48px;margin-bottom:10px">😴</div>';
+    html += '<div style="font-size:16px;font-weight:700;color:#6070A0">완전 휴식의 날</div>';
+    html += '<div style="font-size:13px;margin-top:8px;color:#3A4460;line-height:1.6">근육이 쉬어야 성장합니다.<br>스트레칭 10분만 가볍게.</div></div>';
+  } else {
+    html += '<div style="font-size:10px;color:#445;font-weight:700;letter-spacing:1.5px;margin-bottom:8px">TODAY\'S EXERCISES</div>';
+    p.exs.forEach(function(k){
+      var ex=EX[k]; if(!ex)return;
+      var ck=isChecked(d,k);
+      html += '<div data-action="openex" data-key="'+k+'" style="display:flex;align-items:center;gap:12px;background:'+(ck?'#0D1810':'#141829')+';border:1px solid '+(ck?'#1E3020':'#1E2440')+';border-radius:14px;padding:14px;margin-bottom:8px;cursor:pointer;opacity:'+(ck?'.6':'1')+'">';
+      html += '<div style="width:26px;height:26px;border-radius:50%;border:2px solid '+(ck?'#2DC653':'#3A4060')+';background:'+(ck?'#2DC653':'transparent')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">';
+      if(ck) html += '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 7L5.5 10L11.5 4" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      html += '</div>';
+      html += '<div style="flex:1"><div style="font-size:14px;font-weight:700;color:'+(ck?'#556':'#D8E4FF')+';text-decoration:'+(ck?'line-through':'none')+'">'+ex.name+'</div>';
+      html += '<div style="font-size:11px;color:#445;margin-top:2px">'+ex.sets+' · '+ex.weight+'</div></div>';
+      html += '<div style="text-align:right;flex-shrink:0"><div style="width:36px;height:36px;border-radius:9px;background:'+ex.color+'15;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:3px">'+ex.icon+'</div>';
+      html += '<div style="font-size:10px;color:#FF6B35;font-weight:600">🔥'+ex.kcal.split(' ')[0]+'</div></div></div>';
+    });
+  }
+
+  // Daily missions
+  html += '<div style="font-size:10px;color:#445;font-weight:700;letter-spacing:1.5px;margin:14px 0 8px">데일리 미션</div>';
+
+  // Protein tracker
+  var protLog = getProtLog(d);
+  var protVal = protLog.reduce(function(a,i){return a+i.g;},0);
+  var protPct = Math.min(100,Math.round(protVal/100*100));
+  var protDone = protVal>=100;
+  var pc = protDone?'#2DC653':protVal>=70?'#FFD166':'#FF6B35';
+
+  html += '<div style="background:'+(protDone?'#0A2A0A':'#141829')+';border:1px solid '+(protDone?'#2DC65340':'#1E2440')+';border-radius:14px;padding:14px;margin-bottom:8px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+  html += '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">🥩</span><div>';
+  html += '<div style="font-size:13px;font-weight:700;color:#C8D8F0">단백질 100g 채우기</div>';
+  html += '<div style="font-size:11px;color:#445">모로가든 100g만 채우면 됨 ㅋㅋ</div></div></div>';
+  html += '<div style="text-align:right"><div style="font-size:24px;font-weight:900;color:'+pc+'">'+protVal+'<span style="font-size:11px;color:#445">g</span></div><div style="font-size:10px;color:#445">/ 100g</div></div></div>';
+  html += '<div style="height:7px;background:#1E2440;border-radius:4px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:'+protPct+'%;background:'+pc+';border-radius:4px"></div></div>';
+
+  // Food buttons
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">';
+  PROT_FOODS.forEach(function(f,idx){
+    html += '<button data-action="addfood" data-idx="'+idx+'" style="background:#1A2040;border:1px solid #242848;border-radius:10px;padding:8px 4px;cursor:pointer;text-align:center">';
+    html += '<div style="font-size:18px;margin-bottom:2px">'+f.icon+'</div>';
+    html += '<div style="font-size:11px;font-weight:700;color:#C0D0F0">'+f.label+'</div>';
+    html += '<div style="font-size:10px;color:#445">'+f.sub+'</div>';
+    html += '<div style="font-size:11px;font-weight:700;color:'+pc+';margin-top:2px">+'+f.g+'g</div></button>';
+  });
+  html += '</div>';
+
+  // Custom input
+  html += '<div style="display:flex;gap:6px;margin-bottom:8px">';
+  html += '<input id="pname" type="text" placeholder="음식 이름" style="flex:2;background:#1A2040;border:1px solid #242848;border-radius:10px;padding:9px 10px;color:#fff;font-size:12px;outline:none;" />';
+  html += '<input id="pgram" type="number" placeholder="g" style="width:55px;background:#1A2040;border:1px solid #242848;border-radius:10px;padding:9px 6px;color:#fff;font-size:12px;outline:none;-webkit-appearance:none;text-align:center" />';
+  html += '<button data-action="addcustom" style="padding:9px 12px;background:#2EC4B6;border:none;border-radius:10px;color:white;font-size:14px;font-weight:700;cursor:pointer">+</button>';
+  html += '</div>';
+
+  // Prot log
+  if(protLog.length>0){
+    html += '<div style="border-top:1px solid #1E2440;padding-top:8px;margin-bottom:8px">';
+    protLog.forEach(function(item,idx){
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:#1A2040;border-radius:8px;margin-bottom:4px">';
+      html += '<div style="font-size:12px;color:#C0D0F0">'+H(item.name)+'</div>';
+      html += '<div style="display:flex;align-items:center;gap:8px">';
+      html += '<div style="font-size:12px;font-weight:700;color:'+pc+'">+'+item.g+'g</div>';
+      html += '<button data-action="removeprot" data-idx="'+idx+'" style="background:#E6394620;border:1px solid #E6394640;border-radius:6px;color:#E63946;font-size:11px;padding:2px 7px;cursor:pointer">✕</button>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+  if(protDone) html += '<div style="text-align:center;padding:6px 0;font-size:13px;font-weight:700;color:#2DC653">✅ 오늘 단백질 달성!</div>';
+  html += '<button data-action="resetprot" style="width:100%;padding:7px;background:#1E2440;border:none;border-radius:9px;color:#556;font-size:11px;cursor:pointer">전체 초기화</button>';
+  html += '</div>';
+
+  // Shake mission
+  var shakeDone = isChecked(d,'shake');
+  html += '<div data-action="toggleshake" style="display:flex;align-items:center;gap:12px;background:'+(shakeDone?'#0D1810':'#141829')+';border:1px solid '+(shakeDone?'#1E3020':'#1E2440')+';border-radius:14px;padding:14px;margin-bottom:8px;cursor:pointer;opacity:'+(shakeDone?'.6':'1')+'">';
+  html += '<div style="width:26px;height:26px;border-radius:50%;border:2px solid '+(shakeDone?'#2DC653':'#2EC4B660')+';background:'+(shakeDone?'#2DC653':'transparent')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">';
+  if(shakeDone) html += '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 7L5.5 10L11.5 4" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  html += '</div>';
+  html += '<div style="flex:1"><div style="font-size:14px;font-weight:700;color:'+(shakeDone?'#556':'#C8D8F0')+';text-decoration:'+(shakeDone?'line-through':'none')+'">운동 후 뉴치트 섭취</div>';
+  html += '<div style="font-size:11px;color:#445">운동 끝나고 30~45분 내로</div></div>';
+  html += '<div style="width:36px;height:36px;border-radius:9px;background:#2EC4B615;display:flex;align-items:center;justify-content:center;font-size:18px">🥤</div></div>';
+
+  // Completion
+  var missionsDone = protDone && shakeDone;
+  if(allDone && missionsDone){
+    html += '<div style="padding:16px;background:linear-gradient(135deg,#0A2A0A,#0D1D0D);border:1px solid #2DC65340;border-radius:14px;text-align:center;margin-bottom:10px">';
+    html += '<div style="font-size:32px;margin-bottom:6px">🎉</div><div style="font-size:15px;font-weight:700;color:#2DC653">오늘 완전 달성!</div>';
+    html += '<div style="font-size:12px;color:#456B45;margin-top:4px">내일도 고고! 💪</div></div>';
+  }
+
+  // Drink counter
+  var dc = getDrinks();
+  var dk,dbg,dborder,demoji,dlabel;
+  if(dc===0){dk='#2DC653';dbg='#0A2A0A';dborder='#2DC65330';demoji='🍺';dlabel='이번 주 아직 안 마심';}
+  else if(dc===1){dk='#FFD166';dbg='#1A1A0A';dborder='#FFD16640';demoji='🍺';dlabel='남은 횟수 1회';}
+  else if(dc===2){dk='#FF6B35';dbg='#1A0E0A';dborder='#FF6B3540';demoji='⚠️';dlabel='이번 주 다 썼어요!';}
+  else{dk='#E63946';dbg='#1A0808';dborder='#E6394650';demoji='💀';dlabel='망함 ㅋㅋ';}
+
+  html += '<div style="font-size:10px;color:#445;font-weight:700;letter-spacing:1.5px;margin-bottom:8px">🍺 이번 주 음주 현황</div>';
+  html += '<div style="background:'+dbg+';border:1px solid '+dborder+';border-radius:14px;padding:14px;margin-bottom:8px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  html += '<div><div style="font-size:19px;font-weight:800;color:'+dk+'">'+demoji+'  '+dlabel+'</div>';
+  html += '<div style="font-size:11px;color:#445;margin-top:3px">주 2회 한도 · 운동 4회 완료 시 보상 음주 OK</div></div>';
+  html += '<div style="text-align:center"><div style="font-size:26px;font-weight:900;color:'+dk+'">'+dc+'<span style="font-size:12px;color:#445">/2</span></div>';
+  html += '<div style="font-size:10px;color:#445">이번 주</div></div></div>';
+  var bars='';for(var bi=0;bi<Math.max(2,dc);bi++)bars+='<div style="flex:1;height:8px;border-radius:4px;background:'+(bi<dc?dk:'#1E2440')+'"></div>';
+  html += '<div style="display:flex;gap:6px;margin-bottom:10px">'+bars+'</div>';
+  html += '<div style="display:flex;gap:8px">';
+  html += '<button data-action="adddrink" style="flex:1;padding:11px;background:'+dk+';border:none;border-radius:11px;color:white;font-size:13px;font-weight:700;cursor:pointer">🍺 한 번 마셨어요</button>';
+  html += '<button data-action="removedrink" style="width:42px;padding:11px;background:#1E2440;border:none;border-radius:11px;color:#8090B0;font-size:14px;cursor:pointer">↩</button>';
+  html += '</div></div>';
+
+  // Snack guide
+  html += '<div style="background:#141829;border:1px solid #1E2440;border-radius:14px;overflow:hidden;margin-bottom:8px">';
+  html += '<button data-action="toggletip" style="width:100%;padding:13px 15px;background:none;border:none;display:flex;justify-content:space-between;align-items:center;cursor:pointer">';
+  html += '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:17px">💡</span><span style="font-size:13px;font-weight:700;color:#C0D0F0">술 마실 때 안주 가이드</span></div>';
+  html += '<span id="tiparrow" style="color:#8090B0;font-size:13px">▼</span></button>';
+  html += '<div id="tipbody" style="display:none;padding:0 15px 14px">';
+  var bests=[['삼겹살 / 목살','단백질 풍부'],['두부김치','단백질+식이섬유'],['해산물 (새우·조개)','고단백 저칼로리'],['계란말이','단백질 채우기 간편'],['육회 / 닭발','단백질 높고 탄수 낮음']];
+  var bads=[['치킨 + 맥주','지방+탄수 폭탄'],['피자 / 떡볶이','체지방 직행'],['감자튀김 / 튀김류','기름+탄수 = 최악'],['라면 / 볶음밥','늦은 시간 + 탄수'],['과자류','멈출 수가 없음 ㅋ']];
+  html += '<div style="font-size:10px;font-weight:700;color:#2DC653;letter-spacing:1px;margin-bottom:6px">✅ 베스트 안주</div>';
+  bests.forEach(function(s){ html+='<div style="display:flex;gap:6px;margin-bottom:5px"><span style="color:#2DC653;font-size:12px">→</span><span style="font-size:12px;font-weight:600;color:#C0D0F0">'+s[0]+'</span><span style="font-size:11px;color:#445;margin-left:4px">'+s[1]+'</span></div>'; });
+  html += '<div style="font-size:10px;font-weight:700;color:#E63946;letter-spacing:1px;margin:8px 0 6px">❌ 피해야 할 안주</div>';
+  bads.forEach(function(s){ html+='<div style="display:flex;gap:6px;margin-bottom:5px"><span style="color:#E63946;font-size:12px">✕</span><span style="font-size:12px;font-weight:600;color:#C0D0F0">'+s[0]+'</span><span style="font-size:11px;color:#445;margin-left:4px">'+s[1]+'</span></div>'; });
+  html += '</div></div>';
+
+  html += '</div>';
+  return html;
+}
+
+function renderCalendar(){
+  var today=new Date(), year=START.getFullYear(), month=START.getMonth();
+  var first=new Date(year,month,1), startDow=first.getDay(), daysInMonth=new Date(year,month+1,0).getDate();
+  var totalEx=0,totalDone=0;
+  for(var dd=3;dd<=daysInMonth;dd++){var dt=new Date(year,month,dd);var pp=planForDate(dt);if(pp.exs.length>0){totalEx+=pp.exs.length;pp.exs.forEach(function(k){if(isChecked(dt,k))totalDone++;});}}
+  var streak=getStreak();
+  var html='<div style="padding:14px 18px 0">';
+  html+='<div style="font-size:11px;color:#445;font-weight:700;letter-spacing:2px;margin-bottom:2px">MISSION CALENDAR</div>';
+  html+='<div style="font-size:21px;font-weight:800;letter-spacing:-.5px;margin-bottom:14px">'+year+'년 '+(month+1)+'월</div>';
+  html+='<div style="display:flex;gap:8px;margin-bottom:16px">';
+  html+='<div style="flex:1;background:#141829;border:1px solid #1E2440;border-radius:13px;padding:13px;text-align:center"><div style="font-size:24px;font-weight:800;color:#FF6B35">'+totalDone+'</div><div style="font-size:10px;color:#445;margin-top:2px">완료 운동</div></div>';
+  html+='<div style="flex:1;background:#141829;border:1px solid #1E2440;border-radius:13px;padding:13px;text-align:center"><div style="font-size:24px;font-weight:800;color:#FFD166">'+streak+'</div><div style="font-size:10px;color:#445;margin-top:2px">연속 일수 🔥</div></div>';
+  html+='<div style="flex:1;background:#141829;border:1px solid #1E2440;border-radius:13px;padding:13px;text-align:center"><div style="font-size:24px;font-weight:800;color:#2DC653">'+(totalEx>0?Math.round(totalDone/totalEx*100):0)+'%</div><div style="font-size:10px;color:#445;margin-top:2px">달성률</div></div>';
+  html+='</div>';
+  // Weight check legend
+  html+='<div style="background:#1A1A0A;border:1px solid #FFD16640;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">';
+  html+='<span style="font-size:18px">💪</span>';
+  html+='<div><div style="font-size:12px;font-weight:700;color:#FFD166">증량 체크일 — 5/17 · 5/31</div>';
+  html+='<div style="font-size:11px;color:#556;margin-top:2px">이날 Claude한테 "이번 주 운동 어땠어" 말 걸어서 무게 업데이트 하기</div></div></div>';
+
+  html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">';
+  ['일','월','화','수','목','금','토'].forEach(function(h){html+='<div style="font-size:10px;font-weight:700;color:#445;text-align:center;padding:5px 0">'+h+'</div>';});
+  for(var ei=0;ei<startDow;ei++)html+='<div></div>';
+  for(var dn=1;dn<=daysInMonth;dn++){
+    var dt=new Date(year,month,dn);
+    var pp=planForDate(dt);
+    var isTd=sameDay(dt,today);
+    var isFut=dt>today;
+    var isPast=dn<3;
+    var dayDone=isDayDone(dt);
+    var bg=isPast?'transparent':dayDone&&!isFut?pp.color+'30':'#141829';
+    var border=isTd?'2px solid '+pp.color:(isPast?'none':'1px solid #1E2440');
+    // Weight check dates: May 17, May 31
+    var isWeightCheck = (year===2026 && month===4 && (dn===17||dn===31));
+    var checkBorder = isWeightCheck ? '2px solid #FFD166' : border;
+    html+='<div data-action="gotodate" data-y="'+year+'" data-m="'+month+'" data-d="'+dn+'" style="aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:'+bg+';border:'+checkBorder+';cursor:'+(dn>=3?'pointer':'default')+';opacity:'+(isFut?.4:1)+'">';
+    html+='<span style="font-size:12px;font-weight:'+(isTd||isWeightCheck?800:600)+';color:'+(isPast?'#333':dayDone&&!isFut?'#fff':isWeightCheck?'#FFD166':'#8090B0')+'">'+dn+'</span>';
+    if(dn>=3&&!isFut&&dayDone)html+='<span style="font-size:8px">✓</span>';
+    else if(isWeightCheck)html+='<span style="font-size:9px">💪</span>';
+    html+='</div>';
+  }
+  html+='</div>';
+  html+='<div style="margin-top:16px"><div style="font-size:10px;color:#445;font-weight:700;letter-spacing:1.5px;margin-bottom:8px">주간 플랜</div>';
+  PLAN.forEach(function(pp){
+    html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;background:#141829;border:1px solid #1E2440;border-radius:12px;padding:10px 13px">';
+    html+='<div style="width:32px;height:32px;border-radius:8px;background:'+pp.color+'20;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">'+pp.emoji+'</div>';
+    html+='<div style="flex:1"><div style="font-size:13px;font-weight:700;color:#C8D8F0">'+pp.day+'요일  <span style="color:'+pp.color+'">'+pp.label+'</span></div>';
+    html+='<div style="font-size:11px;color:#445;margin-top:1px">'+(pp.exs.length?pp.exs.map(function(k){return EX[k]?EX[k].name:k;}).join(' · '):'완전 휴식')+'</div></div></div>';
+  });
+  html+='</div>';
+
+  // Data backup section
+  html+='<div style="margin-top:20px">';
+  html+='<div style="font-size:10px;color:#445;font-weight:700;letter-spacing:1.5px;margin-bottom:8px">🔒 데이터 백업</div>';
+  html+='<div style="background:#141829;border:1px solid #1E2440;border-radius:14px;padding:14px">';
+  html+='<div style="font-size:12px;color:#8898BB;line-height:1.6;margin-bottom:12px">앱 업데이트 받기 전에 <span style="color:#FFD166;font-weight:700">내보내기</span> 눌러서 코드 복사 → 새 파일에서 <span style="color:#2DC653;font-weight:700">가져오기</span> 로 기록 복원</div>';
+  html+='<div style="display:flex;gap:8px;margin-bottom:10px">';
+  html+='<button data-action="exportdata" style="flex:1;padding:11px;background:#FFD16620;border:1px solid #FFD16650;border-radius:10px;color:#FFD166;font-size:13px;font-weight:700;cursor:pointer">📤 내보내기</button>';
+  html+='<button data-action="importdata" style="flex:1;padding:11px;background:#2DC65320;border:1px solid #2DC65350;border-radius:10px;color:#2DC653;font-size:13px;font-weight:700;cursor:pointer">📥 가져오기</button>';
+  html+='</div>';
+  html+='<div id="backup-msg" style="font-size:12px;color:#445;text-align:center"></div>';
+  html+='</div></div>';
+
+  html+='</div></div>';
+  return html;
+}
+
+function renderResults(){
+  var html='<div style="padding:14px 18px 0">';
+  html+='<div style="font-size:11px;color:#445;font-weight:700;letter-spacing:2px;margin-bottom:2px">1개월 예상 효과</div>';
+  html+='<div style="font-size:21px;font-weight:800;letter-spacing:-.5px">175cm · 90kg 기준</div>';
+  html+='<div style="font-size:12px;color:#556;margin-top:3px;margin-bottom:16px">초보자 평균값 / 주 4~5회 꾸준히 진행했을 때</div>';
+  html+='<div style="background:#1A1E32;border:1px solid #2A3055;border-radius:12px;padding:11px 14px;margin-bottom:14px;display:flex;gap:10px;align-items:flex-start"><span style="font-size:15px;flex-shrink:0">📋</span><div style="font-size:11px;color:#667;line-height:1.6">과체중 초보자 대상 운동 중재 연구 메타분석 평균값.<br>식단 병행 시 상단값, 운동만 할 경우 하단값.</div></div>';
+
+  function metric(label,before,after,desc,color,pct){
+    var h='<div style="margin-bottom:14px">';
+    h+='<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;font-weight:700;color:#C0D0F0">'+label+'</span>';
+    h+='<span style="font-size:12px;color:#556">'+before+' → <span style="color:'+color+';font-weight:700">'+after+'</span></span></div>';
+    h+='<div style="height:7px;background:#1E2440;border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:4px"></div></div>';
+    h+='<div style="font-size:11px;color:#445;margin-top:3px">'+desc+'</div></div>';
+    return h;
+  }
+
+  html+='<div style="background:linear-gradient(135deg,#1A1030,#0F1428);border:1px solid #9B51E030;border-radius:14px;padding:16px;margin-bottom:10px">';
+  html+='<div style="font-size:13px;font-weight:700;color:#9B51E0;margin-bottom:14px">🏆 신체 변화 예측</div>';
+  html+=metric('체중','90kg','88~88.5kg','−1.5~2kg | 식단 병행 시 최대 −2.5kg','#FF6B35',55);
+  html+=metric('체지방률','약 29~30%','27.5~29%','−1~1.5%p | 과체중 초보자 1개월 평균','#FFD166',45);
+  html+=metric('허리둘레','현재 기준','−2~3cm','유산소 주 150분+ 시 유의미한 감소','#2EC4B6',50);
+  html+=metric('BMI','29.4','28.8~29.0','완전 정상 범위는 2~3개월 더 필요','#2DC653',40);
+  html+='</div>';
+
+  html+='<div style="background:#1A1010;border:1px solid #E6394620;border-radius:12px;padding:12px 15px;margin-bottom:10px">';
+  html+='<div style="font-size:12px;font-weight:700;color:#E63946;margin-bottom:5px">⚠️ 체중계 숫자에 속지 마세요</div>';
+  html+='<div style="font-size:12px;color:#8898BB;line-height:1.6">1~2주차엔 수분+글리코겐 감소로 체중이 빠르게 빠지는 것처럼 보여요.<br>진짜 지방 감소는 <span style="color:#2EC4B6;font-weight:700">3주차</span>부터. 체중보다 <span style="color:#2EC4B6;font-weight:700">허리둘레</span>를 같이 재세요.</div>';
+  html+='</div>';
+
+  html+='<div style="background:#141829;border:1px solid #1E2440;border-radius:14px;padding:16px;margin-bottom:10px">';
+  html+='<div style="font-size:13px;font-weight:700;color:#FF6B35;margin-bottom:12px">💪 근력 향상 예측 (뉴비 효과)</div>';
+  [['벤치프레스','15kg →','20~25kg','+5~10kg'],['랫풀다운','25kg →','35~40kg','+10~15kg'],['숄더프레스','10kg →','15~18kg','+5~8kg'],['스쿼트','맨몸 →','20~30kg','바벨 적응']].forEach(function(r){
+    html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;background:#1A2030;border-radius:10px;padding:10px 12px">';
+    html+='<div style="flex:1"><div style="font-size:13px;font-weight:700;color:#D0DCF4">'+r[0]+'</div>';
+    html+='<div style="font-size:12px;color:#445;margin-top:1px">'+r[1]+' <span style="color:#FF6B35;font-weight:700">'+r[2]+'</span></div></div>';
+    html+='<div style="background:#FF6B3520;border:1px solid #FF6B3540;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:700;color:#FF6B35">'+r[3]+'</div></div>';
+  });
+  html+='</div>';
+
+  html+='<div style="background:#141829;border:1px solid #1E2440;border-radius:14px;padding:16px;margin-bottom:10px">';
+  html+='<div style="font-size:13px;font-weight:700;color:#2EC4B6;margin-bottom:14px">📅 주차별 현실 타임라인</div>';
+  [['1주차','🌱','적응기','신경계 적응 중. 근육통 있음 (정상). 체중 ±0~−0.5kg.','#FF6B35'],
+   ['2주차','📈','루틴 정착','근육통 줄어듦. 운동이 루틴화됨. 체중 −0.5~1kg 누적.','#FFD166'],
+   ['3주차','🔥','진짜 지방 연소','이때부터 진짜 체지방 감소. 어깨/가슴에 힘 붙는 느낌.','#2EC4B6'],
+   ['4주차','✨','체감 변화','총 −1.5~2.5kg. 허리 살짝 들어간 느낌. 벨트 구멍 이동 가능성.','#2DC653']
+  ].forEach(function(tl){
+    html+='<div style="display:flex;gap:12px;margin-bottom:14px">';
+    html+='<div style="width:34px;height:34px;border-radius:50%;background:'+tl[4]+'20;border:2px solid '+tl[4]+'40;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">'+tl[1]+'</div>';
+    html+='<div style="padding-top:3px"><div style="font-size:12px;font-weight:700;color:'+tl[4]+';margin-bottom:2px">'+tl[0]+'  '+tl[2]+'</div>';
+    html+='<div style="font-size:12px;color:#8898BB;line-height:1.5">'+tl[3]+'</div></div></div>';
+  });
+  html+='</div>';
+
+  html+='<div style="background:linear-gradient(135deg,#0A1E0A,#0D1D10);border:1px solid #2DC65330;border-radius:14px;padding:16px">';
+  html+='<div style="font-size:13px;font-weight:700;color:#2DC653;margin-bottom:8px">🚀 3개월 목표</div>';
+  html+='<div style="font-size:13px;color:#6A8A6A;line-height:1.65">1개월이 제일 힘들어요. 이걸 넘기면 습관이 됩니다.<br>3개월 꾸준히 하면 <span style="color:#2DC653;font-weight:700">체중 −5~7kg, 체지방 −3~5%p</span> 현실적으로 가능.<br>그 시점부터 주변에서 먼저 물어봅니다. 화이팅! 💪</div>';
+  html+='</div></div>';
+  return html;
+}
+
+// ── EXERCISE MODAL ────────────────────────────────────────────────────────
+var MODAL_KEY = null;
+function openModal(key){
+  var ex=EX[key]; if(!ex)return;
+  MODAL_KEY=key;
+  var ck=isChecked(CURDATE,key);
+  var wk=weekNum();
+  var m=document.createElement('div');
+  m.id='modal';
+  m.style.cssText='position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.88);display:flex;align-items:flex-end;justify-content:center';
+  var html='<div id="modalbody" style="width:100%;max-width:480px;background:#161B2E;border-radius:24px 24px 0 0;max-height:90vh;overflow-y:auto;animation:slideUp .25s ease">';
+  html+='<style>@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}</style>';
+  html+='<div style="background:linear-gradient(135deg,'+ex.color+'20,'+ex.color+'08);border-bottom:1px solid '+ex.color+'25;padding:20px 18px 14px;position:sticky;top:0;background:#161B2E">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+  html+='<div><div style="font-size:26px;margin-bottom:4px">'+ex.icon+'</div>';
+  html+='<div style="font-size:19px;font-weight:800">'+ex.name+'</div>';
+  html+='<div style="display:inline-block;margin-top:5px;background:'+ex.color+'25;color:'+ex.color+';font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px">'+ex.target+'</div></div>';
+  html+='<button id="closebtn" style="background:#ffffff15;border:none;color:#aaa;width:32px;height:32px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button></div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:12px">';
+  html+='<div style="background:#ffffff08;border-radius:10px;padding:8px;border:1px solid #ffffff10;text-align:center"><div style="font-size:15px;margin-bottom:2px">⏱</div><div style="font-size:9px;color:#667;margin-bottom:2px">소요시간</div><div style="font-size:11px;font-weight:700">'+ex.dur+'</div></div>';
+  html+='<div style="background:#FF6B3515;border-radius:10px;padding:8px;border:1px solid #FF6B3530;text-align:center"><div style="font-size:15px;margin-bottom:2px">🔥</div><div style="font-size:9px;color:#FF6B35;margin-bottom:2px">칼로리</div><div style="font-size:11px;font-weight:700;color:#FF6B35">'+ex.kcal+'</div></div>';
+  html+='<div style="background:#ffffff08;border-radius:10px;padding:8px;border:1px solid #ffffff10;text-align:center"><div style="font-size:15px;margin-bottom:2px">💪</div><div style="font-size:9px;color:#667;margin-bottom:2px">세트</div><div style="font-size:9px;font-weight:700">'+ex.sets+'</div></div></div>';
+  html+='<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">';
+  ex.benefits.forEach(function(b){html+='<div style="background:'+ex.color+'20;border:1px solid '+ex.color+'40;color:'+ex.color+';font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px">'+b+'</div>';});
+  html+='</div>';
+
+  // Prominent sets/reps display
+  html+='<div style="margin-top:12px;background:#0D1628;border:1px solid '+ex.color+'30;border-radius:12px;padding:12px 14px">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
+  html+='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">💪</span><div>';
+  html+='<div style="font-size:10px;color:#556;font-weight:600;letter-spacing:.5px">세트 & 반복</div>';
+  html+='<div style="font-size:14px;font-weight:800;color:#fff;margin-top:1px">'+ex.sets+'</div></div></div>';
+  html+='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">⏸</span><div>';
+  html+='<div style="font-size:10px;color:#556;font-weight:600;letter-spacing:.5px">세트 사이 휴식</div>';
+  html+='<div style="font-size:14px;font-weight:800;color:'+ex.color+';margin-top:1px">'+ex.rest+'</div></div></div>';
+  html+='</div></div></div>';
+
+  // YouTube video button
+  if(ex.videoUrl){
+    html+='<div style="margin:14px 0 0">';
+    html+='<div style="font-size:11px;font-weight:700;color:#8090B0;letter-spacing:1.2px;margin-bottom:8px">📹 사용법 영상 (한국어)</div>';
+    html+='<a href="'+ex.videoUrl+'" target="_blank" style="display:flex;align-items:center;gap:12px;background:#1A0A0A;border:1px solid #E6394630;border-radius:14px;padding:13px 15px;text-decoration:none">';
+    html+='<div style="width:42px;height:42px;background:#FF0000;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">▶</div>';
+    html+='<div style="flex:1"><div style="font-size:13px;font-weight:700;color:#fff">'+ex.name+' 사용법</div>';
+    html+='<div style="font-size:11px;color:#E63946;margin-top:2px">YouTube에서 영상 보기</div></div>';
+    html+='<span style="color:#445;font-size:18px">›</span></a></div>';
+  }
+
+  // SVG Illustration
+  if(EX_SVG[key]){
+    html+='<div style="margin:16px 0 0">';
+    html+='<div style="font-size:11px;font-weight:700;color:#8090B0;letter-spacing:1.2px;margin-bottom:8px">🖼  기구 & 동작 그림</div>';
+    html+='<div style="background:#0D1120;border:1px solid #1E2440;border-radius:14px;padding:10px;overflow:hidden">'+EX_SVG[key]+'</div>';
+    html+='</div>';
+  }
+  html+='<div style="padding:0 18px 40px">';
+  if(ex.ytUrl){
+    html+='<div style="margin-top:16px;background:#0A1E0A;border:1px solid #2DC65340;border-radius:14px;padding:14px">';
+    html+='<div style="font-size:10px;color:#445;font-weight:700;letter-spacing:1px;margin-bottom:10px">유산소 영상</div>';
+    html+='<div style="display:flex;gap:8px;margin-bottom:12px">';
+    html+='<div style="flex:1;background:'+(wk<=2?'#0D2A1A':'#141829')+';border:1px solid '+(wk<=2?'#2DC65330':'#1E2440')+';border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:#2DC653;font-weight:700">1~2주차</div><div style="font-size:18px;font-weight:800">30분</div></div>';
+    html+='<div style="flex:1;background:'+(wk>=3?'#0D2A1A':'#141829')+';border:1px solid '+(wk>=3?'#2DC65330':'#1E2440')+';border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:'+(wk>=3?'#2DC653':'#445')+';font-weight:700">3~4주차</div><div style="font-size:18px;font-weight:800;color:'+(wk>=3?'#fff':'#334')+'">40분</div></div></div>';
+    html+='<a href="'+ex.ytUrl+'" target="_blank" style="display:block;padding:13px;background:linear-gradient(135deg,#FF0000,#CC0000);border-radius:12px;color:white;font-size:14px;font-weight:700;text-align:center;text-decoration:none">▶  유튜브에서 영상 열기</a></div>';
+  }
+  html+='<div style="margin-top:16px"><div style="font-size:11px;font-weight:700;color:'+ex.color+';letter-spacing:1.5px;margin-bottom:10px">HOW TO</div>';
+  ex.steps.forEach(function(s,i){
+    html+='<div style="display:flex;gap:10px;align-items:flex-start;background:#ffffff06;border:1px solid #ffffff08;border-radius:11px;padding:11px 13px;margin-bottom:8px">';
+    html+='<div style="width:20px;height:20px;border-radius:50%;background:'+ex.color+'25;color:'+ex.color+';font-size:11px;font-weight:700;flex-shrink:0;display:flex;align-items:center;justify-content:center">'+(i+1)+'</div>';
+    html+='<div style="font-size:13px;color:#D0D8F0;line-height:1.5">'+H(s)+'</div></div>';
+  });
+  html+='</div>';
+  html+='<div style="margin-top:14px"><div style="font-size:11px;font-weight:700;color:#E63946;letter-spacing:1.5px;margin-bottom:8px">⚠️ 자주 하는 실수</div>';
+  ex.mistakes.forEach(function(ms){html+='<div style="display:flex;gap:7px;align-items:flex-start;padding:7px 11px;background:#E6394610;border:1px solid #E6394620;border-radius:9px;margin-bottom:6px;font-size:12px;color:#C0C8E0"><span style="color:#E63946;flex-shrink:0">✕</span>'+H(ms)+'</div>';});
+  html+='</div>';
+  html+='<div style="margin-top:14px;padding:13px 15px;background:'+ex.color+'15;border:1px solid '+ex.color+'30;border-radius:12px">';
+  html+='<div style="font-size:10px;color:'+ex.color+';font-weight:700;margin-bottom:4px">💡 TIP</div>';
+  html+='<div style="font-size:13px;color:#C8D4F0;line-height:1.5">'+H(ex.tip)+'</div></div>';
+  html+='<button id="completebtn" style="width:100%;margin-top:18px;padding:15px;background:'+(ck?'transparent':'linear-gradient(135deg,'+ex.color+','+ex.color+'BB)')+';border:'+(ck?'2px solid #2DC653':'none')+';border-radius:15px;color:'+(ck?'#2DC653':'white')+';font-size:15px;font-weight:700;cursor:pointer">'+(ck?'✓  완료됨  (취소하려면 탭)':'완료 체크하기')+'</button>';
+  html+='</div></div>';
+  m.innerHTML=html;
+  document.body.appendChild(m);
+  document.getElementById('closebtn').addEventListener('click',closeModal);
+  document.getElementById('completebtn').addEventListener('click',function(){ toggleChecked(CURDATE,MODAL_KEY); closeModal(); render(); });
+  m.addEventListener('click',function(e){ if(e.target===m)closeModal(); });
+}
+function closeModal(){ var m=document.getElementById('modal');if(m)m.remove();MODAL_KEY=null; }
+
+// ── EVENT DELEGATION ──────────────────────────────────────────────────────
+document.addEventListener('click', function(e){
+  var el = e.target;
+  // Walk up to find data-action
+  while(el && el !== document.body){
+    var action = el.getAttribute('data-action');
+    if(action) break;
+    el = el.parentElement;
+  }
+  if(!el||!el.getAttribute) return;
+  var action = el.getAttribute('data-action');
+  if(!action) return;
+
+  if(action==='nav'){
+    PAGE = el.getAttribute('data-page');
+    document.querySelectorAll('.nb').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-page')===PAGE); });
+    render();
+  }
+  else if(action==='goday'){
+    var dow=parseInt(el.getAttribute('data-dow'));
+    var today=new Date(), todayDow=today.getDay();
+    var dd=new Date(today); dd.setDate(dd.getDate()-(todayDow-dow));
+    CURDATE=dd; render();
+  }
+  else if(action==='prevday'){
+    var nd=new Date(CURDATE); nd.setDate(nd.getDate()-1);
+    if(nd>=START){ CURDATE=nd; render(); }
+  }
+  else if(action==='nextday'){
+    var nd=new Date(CURDATE); nd.setDate(nd.getDate()+1);
+    CURDATE=nd; render();
+  }
+  else if(action==='openex'){
+    openModal(el.getAttribute('data-key'));
+  }
+  else if(action==='addfood'){
+    var idx=parseInt(el.getAttribute('data-idx'));
+    var f=PROT_FOODS[idx]; if(!f)return;
+    addProtItem(CURDATE, f.g, f.icon+' '+f.label);
+    render();
+  }
+  else if(action==='addcustom'){
+    var nm=document.getElementById('pname');
+    var gm=document.getElementById('pgram');
+    if(!gm)return;
+    var g=parseInt(gm.value);
+    if(!g||g<=0)return;
+    var name=(nm&&nm.value.trim())||'직접입력';
+    addProtItem(CURDATE,g,name);
+    if(nm)nm.value=''; gm.value='';
+    render();
+  }
+  else if(action==='removeprot'){
+    removeProtItem(CURDATE,parseInt(el.getAttribute('data-idx')));
+    render();
+  }
+  else if(action==='resetprot'){
+    resetProtLog(CURDATE); render();
+  }
+  else if(action==='toggleshake'){
+    toggleChecked(CURDATE,'shake'); render();
+  }
+  else if(action==='adddrink'){
+    addDrink(); render();
+  }
+  else if(action==='removedrink'){
+    removeDrink(); render();
+  }
+  else if(action==='toggletip'){
+    var tb=document.getElementById('tipbody');
+    var ta=document.getElementById('tiparrow');
+    if(!tb)return;
+    var open=tb.style.display!=='none';
+    tb.style.display=open?'none':'block';
+    if(ta)ta.textContent=open?'▼':'▲';
+  }
+  else if(action==='exportdata'){
+    exportData();
+  }
+  else if(action==='importdata'){
+    importData();
+  }
+  else if(action==='gotodate'){
+    var y=parseInt(el.getAttribute('data-y')),m=parseInt(el.getAttribute('data-m')),d=parseInt(el.getAttribute('data-d'));
+    if(d<3)return;
+    CURDATE=new Date(y,m,d); PAGE='today';
+    document.querySelectorAll('.nb').forEach(function(b){ b.classList.toggle('on',b.getAttribute('data-page')==='today'); });
+    render();
+  }
+});
+
+// Init
+render();
+</script>
+</body>
+</html>
